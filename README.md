@@ -33,7 +33,60 @@ component of, reject with feedback, or undo — before anything is "booked."
   deliberately deferred later phase; the data model captures what it would
   need (cancellation deadlines, price snapshots) without building the loop.
 
+## How it works
+
+```mermaid
+flowchart TD
+    A(["Traveler states a goal"]) --> B["Intent agent asks only\nfor missing constraints"]
+    B -->|"more info needed"| B
+    B -->|"constraints complete"| C["Compose: 1-3 candidate\nitineraries built + priced"]
+    C --> D{"Traveler reviews\nan itinerary"}
+    D -->|"Approve"| E["approved"]
+    D -->|"Swap a component"| F["Swap agent picks a replacement,\nreconciled against real supply\n+ revalidated"]
+    F --> D
+    D -->|"Reject with feedback"| G["Recompose: whole\ncandidate set replaced"]
+    G --> D
+    D -->|"Undo"| H["Last event reversed\n(swap / approve / recompose)"]
+    H --> D
+    E -->|"Book"| I(["booked — hard lock,\nno further changes"])
+```
+
+Every step in that loop is either the traveler's own action or something
+they explicitly triggered (Approve/Swap/Reject/Book) — nothing executes or
+spends money without an explicit click.
+
 ## Architecture
+
+```mermaid
+flowchart TD
+    Traveler(["Traveler"]) --> Gradio["Gradio UI\napp/ui/gradio_app.py"]
+    Traveler --> REST["REST API\napp/api/"]
+
+    Gradio --> TripService
+    REST --> TripService
+
+    TripService["TripService\napp/services/trip_service.py\n(the one place orchestration lives)"]
+
+    TripService --> SessionStore["SessionStore"]
+    TripService --> PlanStore["PlanStore\n(typed event log, undo)"]
+    TripService --> IntentAgent["intent_agent"]
+    TripService --> CompositionAgent["composition_agent"]
+    TripService --> SwapAgent["swap_agent"]
+    TripService --> Revalidate["revalidate.py\ndeterministic warnings\n(after every swap)"]
+
+    IntentAgent --> AzureOpenAI[("Azure OpenAI\nvia Microsoft Agent Framework")]
+    CompositionAgent --> AzureOpenAI
+    SwapAgent --> AzureOpenAI
+
+    CompositionAgent -. "tool calls" .-> Provider["provider.py\nsearch_flights / hotels / activities"]
+    SwapAgent -. "tool calls" .-> Provider
+    Provider --> Fixtures[("fixtures/*.json\nLisbon, Kyoto, Barcelona")]
+
+    CompositionAgent --> Reconcile["reconcile.py\nre-grounds every LLM pick\nin real supply data"]
+    SwapAgent --> Reconcile
+    Reconcile --> Provider
+    Reconcile --> Rationale["rationale.py\ndeterministic 'why' text"]
+```
 
 - **Agents** (`app/agents/`): three Microsoft Agent Framework `Agent`
   instances over Azure OpenAI — intent elicitation, itinerary composition,
@@ -48,6 +101,40 @@ component of, reject with feedback, or undo — before anything is "booked."
   uniformly.
 - **API** (`app/api/`) + **UI** (`app/ui/gradio_app.py`): FastAPI routes and
   a Gradio `Blocks` UI, mounted onto the same app (`app/main.py`).
+- **The LLM never authors a fact you can compute.** Rationale text, supply
+  prices/dates/cancellation policies, total costs, and swap diffs/warnings
+  are all computed deterministically in Python from real fixture data —
+  the LLM's job is selection, identity/summary text, and day-scheduling
+  only. See `app/supply/{reconcile,rationale,revalidate}.py`.
+
+### Itinerary lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> proposed
+    proposed --> approved: approve
+    approved --> proposed: swap (demotes)
+    approved --> booked: book
+    booked --> [*]: locked
+```
+
+A few things this diagram simplifies, spelled out:
+- Composition's raw output defaults to `draft` (the Pydantic field default),
+  but every itinerary is reconciled and priced before it's ever handed to
+  the store — so `proposed` is the only status the traveler (or the API)
+  ever actually sees at that point.
+- Swapping a component on an itinerary that's still `proposed` leaves its
+  status unchanged (only an *approved* itinerary gets demoted back to
+  `proposed` — content never changes silently under an "approved" label).
+- `booked` is a hard lock: no further swap/approve/reject/undo on that plan.
+- **Undo** isn't a forward transition — it pops the plan's last event
+  (`app/store/plan_store.py`'s typed `PlanEvent` log) and restores whatever
+  came before it, whether that event was a swap, an approve, or a book.
+- **Reject-with-feedback** is plan-level, not itinerary-level: it replaces
+  the *whole* candidate set rather than changing one itinerary's status.
+  `ItineraryStatus.REJECTED` exists on the model but isn't currently
+  assigned by any code path — rejected candidates are simply dropped from
+  the active set (and retained in the event log for undo).
 
 ## Running locally
 
