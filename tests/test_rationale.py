@@ -37,7 +37,7 @@ def test_rationale_for_hotel_cites_matched_tags_and_budget_and_cancellation():
     constraints = Constraints(budget_usd=1500, vibe_tags=["boutique", "walkable"])
     text = rationale_for_hotel(hotel, constraints)
     assert "boutique" in text and "walkable" in text
-    assert "under budget" in text
+    assert "under nightly budget" in text
     assert "2026-08-29" in text
 
 

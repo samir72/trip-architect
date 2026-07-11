@@ -29,11 +29,18 @@ def rationale_for_hotel(hotel: HotelOption, constraints: Constraints) -> str:
         parts.append(f"matches '{', '.join(matched)}' preference")
 
     if constraints.budget_usd:
-        nights = max((hotel.check_out - hotel.check_in).days, 1)
-        total = hotel.nightly_rate_usd * nights
-        pct_under = (constraints.budget_usd - total) / constraints.budget_usd * 100
+        # Compare like with like: the hotel's nightly rate against a nightly
+        # budget derived from the trip's total budget and length -- not the
+        # hotel's full-stay cost against the *whole trip's* budget, which
+        # would make almost any hotel look artificially "under budget".
+        if constraints.start_date and constraints.end_date:
+            trip_nights = max((constraints.end_date - constraints.start_date).days, 1)
+        else:
+            trip_nights = max((hotel.check_out - hotel.check_in).days, 1)
+        nightly_budget = constraints.budget_usd / trip_nights
+        pct_under = (nightly_budget - hotel.nightly_rate_usd) / nightly_budget * 100
         if pct_under > 0:
-            parts.append(f"{pct_under:.0f}% under budget")
+            parts.append(f"{pct_under:.0f}% under nightly budget")
 
     if hotel.cancellation_deadline:
         parts.append(f"free cancellation to {hotel.cancellation_deadline.isoformat()}")
