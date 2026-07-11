@@ -1,6 +1,7 @@
-from app.agents.composition_agent import _finalize, _merge_authoritative, _reconcile_with_supply
+from app.agents.composition_agent import _finalize
 from app.models.constraints import Constraints, PartyComposition
 from app.models.itinerary import ActivityOption, DayPlan, FlightOption, HotelOption, Itinerary, ItineraryStatus
+from app.supply.reconcile import merge_authoritative, reconcile_with_supply
 
 
 def _fabricated_itinerary() -> Itinerary:
@@ -44,7 +45,7 @@ def test_merge_authoritative_coerces_types_and_preserves_untouched_fields():
         "name": "Alfama Food & Wine Tour", "destination": "Lisbon", "category": "food",
         "tags": ["food-forward", "walkable"],
     }
-    merged = _merge_authoritative(activity, authoritative)
+    merged = merge_authoritative(activity, authoritative)
     assert merged.price_usd == 85
     assert merged.name == "Alfama Food & Wine Tour"
     assert merged.date.isoformat() == "2026-09-06"  # preserved, not in authoritative dict
@@ -53,7 +54,7 @@ def test_merge_authoritative_coerces_types_and_preserves_untouched_fields():
 
 def test_reconcile_with_supply_overwrites_fabricated_prices_and_dates():
     itinerary = _fabricated_itinerary()
-    _reconcile_with_supply(itinerary, _constraints())
+    reconcile_with_supply(itinerary, _constraints())
 
     assert itinerary.flight.price_usd == 640 * 2  # nonstop TAP fixture price * 2 adults
     assert itinerary.flight.airline == "TAP Air Portugal"
@@ -72,7 +73,7 @@ def test_reconcile_with_supply_overwrites_fabricated_prices_and_dates():
 def test_reconcile_leaves_unknown_ids_untouched():
     itinerary = _fabricated_itinerary()
     itinerary.hotel.id = "not-a-real-hotel"
-    _reconcile_with_supply(itinerary, _constraints())
+    reconcile_with_supply(itinerary, _constraints())
     assert itinerary.hotel.name == "Wrong Name"  # left as-is, not silently dropped
 
 
