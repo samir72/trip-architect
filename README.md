@@ -100,7 +100,13 @@ credentials — run them by hand when changing agent/prompt behavior.
   traveler-visible behavior in that narrow window can be confusing. A
   busy-state lock in the UI would close this gap; not built for v1.
 
-## Deployment (Hugging Face Spaces, Docker SDK)
+## Deployment
+
+The same `Dockerfile` works on either target below — it binds to `$PORT`
+when set, falling back to 7860 (Hugging Face Spaces doesn't set `PORT`;
+Render and similar PaaS hosts do).
+
+### Hugging Face Spaces (Docker SDK)
 
 Set these as Space **Repository secrets** (never commit them):
 `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`,
@@ -108,3 +114,25 @@ Set these as Space **Repository secrets** (never commit them):
 
 The Space builds `Dockerfile` and serves on port 7860 automatically once
 those secrets are set.
+
+**Known issue:** as of 2026-07, creating a *new* Docker/Gradio Space on a
+free-tier account may return `402 Payment Required` even with room under
+the documented limits — HF's own error message says this requires PRO
+(`huggingface.co/pro`), and it reproduced for both Docker and native Gradio
+SDKs, and persisted even after pausing another Space. No official
+documentation confirms the exact mechanism; treat it as something to
+verify against your account before assuming it'll work.
+
+### Render (Docker web service) — used when HF Spaces isn't available
+
+A Blueprint spec is already in the repo: `render.yaml`.
+
+1. Push this repo to GitHub (already done: `github.com/samir72/trip-architect`).
+2. In the Render dashboard: **New → Blueprint**, connect the GitHub repo.
+   Render reads `render.yaml` and provisions a free Docker web service from
+   the same `Dockerfile` used for HF Spaces.
+3. When prompted, fill in the four `AZURE_OPENAI_*` environment variables
+   (declared `sync: false` in `render.yaml`, so Render prompts for them
+   rather than reading them from the repo).
+4. Render injects `PORT` (default 10000); the Dockerfile's `CMD` already
+   respects it.
