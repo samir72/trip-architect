@@ -10,6 +10,9 @@ pinned: false
 
 # Trip Architect
 
+**Live demo: [trip-architect.onrender.com](https://trip-architect.onrender.com)**
+(free-tier hosting — may take ~30s to wake up on the first request).
+
 Tell us the trip you want; approve the trip we build; change anything,
 anytime — with the agent keeping the whole plan consistent.
 
@@ -210,7 +213,11 @@ SDKs, and persisted even after pausing another Space. No official
 documentation confirms the exact mechanism; treat it as something to
 verify against your account before assuming it'll work.
 
-### Render (Docker web service) — used when HF Spaces isn't available
+### Render (Docker web service) — currently deployed here
+
+This is the live deployment: **https://trip-architect.onrender.com** (free
+tier — sleeps after inactivity, ~30s cold start on the first request after
+a while). Used in place of HF Spaces because of the issue above.
 
 A Blueprint spec is already in the repo: `render.yaml`.
 
