@@ -52,6 +52,19 @@ PYTHONPATH=. python scripts/manual_test_api_flow.py           # full lifecycle t
 Run these by hand whenever changing agent/prompt behavior — the stubbed test
 suite deliberately never calls the real model.
 
+Eval harness (`evals/`; also real Azure OpenAI calls, run by hand, not CI):
+```bash
+python -m evals.run                        # run the fixed 9-scenario battery once
+python -m evals.run --repeat 3              # rerun 3x, report pass RATE per check (one run is noise)
+python -m evals.run --compare OLD.json NEW.json   # diff two saved reports (evals/results/*.json, gitignored)
+```
+Run this whenever changing a prompt in `app/agents/prompts.py` to see
+whether it actually helped. Unlike the pytest suite (deterministic logic
+only) or the manual scripts (one-off, not comparable), this scores the real
+`composition_agent`/`swap_agent` against a fixed battery and gives a number
+you can compare across changes. See `evals/scenarios.py` for what's
+covered and why each scenario exists.
+
 Docker:
 ```bash
 docker build -t trip-architect:local .
