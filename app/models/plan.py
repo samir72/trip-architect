@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from uuid import uuid4
 
@@ -37,9 +37,12 @@ class PlanEvent(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: PlanEventType
     itinerary_id: str | None = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     feedback: str | None = None
     snapshot_before: dict[str, Itinerary] = Field(default_factory=dict)
+    # Only set for plan-wide events (COMPOSED, REJECT_RECOMPOSE), which can
+    # also change candidate_order and so must be able to restore it on undo.
+    candidate_order_before: list[str] | None = None
 
 
 class Plan(BaseModel):
