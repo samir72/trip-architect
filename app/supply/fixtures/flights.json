@@ -1,0 +1,14 @@
+{
+  "Lisbon": [
+    {"id_prefix": "lis-nonstop-tap", "airline": "TAP Air Portugal", "nonstop": true, "duration_minutes": 420, "price_usd": 640},
+    {"id_prefix": "lis-connect-united", "airline": "United", "nonstop": false, "duration_minutes": 690, "price_usd": 470}
+  ],
+  "Kyoto": [
+    {"id_prefix": "kyo-connect-ana", "airline": "ANA", "nonstop": false, "duration_minutes": 1080, "price_usd": 1150},
+    {"id_prefix": "kyo-connect-jal", "airline": "JAL", "nonstop": false, "duration_minutes": 1020, "price_usd": 1280}
+  ],
+  "Barcelona": [
+    {"id_prefix": "bcn-nonstop-level", "airline": "Level", "nonstop": true, "duration_minutes": 480, "price_usd": 590},
+    {"id_prefix": "bcn-connect-iberia", "airline": "Iberia", "nonstop": false, "duration_minutes": 720, "price_usd": 430}
+  ]
+}

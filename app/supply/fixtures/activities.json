@@ -1,0 +1,20 @@
+{
+  "Lisbon": [
+    {"id": "lis-a-food-tour", "name": "Alfama Food & Wine Tour", "category": "food", "tags": ["food-forward", "walkable"], "price_usd": 85},
+    {"id": "lis-a-fado-night", "name": "Traditional Fado Night", "category": "culture", "tags": ["culture"], "price_usd": 45},
+    {"id": "lis-a-sintra-daytrip", "name": "Sintra Palaces Day Trip", "category": "outdoors", "tags": ["outdoors", "family-friendly"], "price_usd": 65},
+    {"id": "lis-a-tram-tour", "name": "Historic Tram 28 Tour", "category": "culture", "tags": ["walkable", "budget"], "price_usd": 15}
+  ],
+  "Kyoto": [
+    {"id": "kyo-a-tea-ceremony", "name": "Traditional Tea Ceremony", "category": "culture", "tags": ["culture", "boutique"], "price_usd": 60},
+    {"id": "kyo-a-bamboo-grove", "name": "Arashiyama Bamboo Grove Walk", "category": "outdoors", "tags": ["outdoors", "walkable"], "price_usd": 0},
+    {"id": "kyo-a-kaiseki-dinner", "name": "Kaiseki Multi-Course Dinner", "category": "food", "tags": ["food-forward", "luxury"], "price_usd": 130},
+    {"id": "kyo-a-fushimi-inari", "name": "Fushimi Inari Shrine Hike", "category": "outdoors", "tags": ["outdoors", "family-friendly"], "price_usd": 0}
+  ],
+  "Barcelona": [
+    {"id": "bcn-a-tapas-crawl", "name": "Gothic Quarter Tapas Crawl", "category": "food", "tags": ["food-forward", "walkable"], "price_usd": 75},
+    {"id": "bcn-a-sagrada-familia", "name": "Sagrada Familia Skip-the-Line Tour", "category": "culture", "tags": ["culture"], "price_usd": 40},
+    {"id": "bcn-a-beach-day", "name": "Barceloneta Beach Day", "category": "outdoors", "tags": ["family-friendly", "outdoors"], "price_usd": 0},
+    {"id": "bcn-a-flamenco-show", "name": "Flamenco Show & Tapas", "category": "culture", "tags": ["culture", "food-forward"], "price_usd": 55}
+  ]
+}

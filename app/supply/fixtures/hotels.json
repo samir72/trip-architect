@@ -1,0 +1,17 @@
+{
+  "Lisbon": [
+    {"id": "lis-h-baixa-boutique", "name": "Baixa Boutique Stay", "nightly_rate_usd": 145, "tags": ["boutique", "walkable", "food-forward"], "cancellation_deadline_days_before_checkin": 3},
+    {"id": "lis-h-alfama-view", "name": "Alfama View Rooms", "nightly_rate_usd": 110, "tags": ["walkable", "budget"], "cancellation_deadline_days_before_checkin": 1},
+    {"id": "lis-h-riverside-luxury", "name": "Tejo Riverside Hotel", "nightly_rate_usd": 260, "tags": ["luxury", "family-friendly"], "cancellation_deadline_days_before_checkin": 5}
+  ],
+  "Kyoto": [
+    {"id": "kyo-h-gion-ryokan", "name": "Gion Ryokan Inn", "nightly_rate_usd": 220, "tags": ["boutique", "culture", "walkable"], "cancellation_deadline_days_before_checkin": 7},
+    {"id": "kyo-h-station-modern", "name": "Kyoto Station Modern Hotel", "nightly_rate_usd": 130, "tags": ["walkable", "budget"], "cancellation_deadline_days_before_checkin": 2},
+    {"id": "kyo-h-arashiyama-family", "name": "Arashiyama Family Lodge", "nightly_rate_usd": 175, "tags": ["family-friendly", "outdoors"], "cancellation_deadline_days_before_checkin": 4}
+  ],
+  "Barcelona": [
+    {"id": "bcn-h-gothic-boutique", "name": "Gothic Quarter Boutique", "nightly_rate_usd": 155, "tags": ["boutique", "walkable", "food-forward"], "cancellation_deadline_days_before_checkin": 3},
+    {"id": "bcn-h-eixample-budget", "name": "Eixample Budget Rooms", "nightly_rate_usd": 90, "tags": ["walkable", "budget"], "cancellation_deadline_days_before_checkin": 1},
+    {"id": "bcn-h-beachfront-family", "name": "Barceloneta Beachfront Hotel", "nightly_rate_usd": 230, "tags": ["family-friendly", "luxury"], "cancellation_deadline_days_before_checkin": 5}
+  ]
+}
