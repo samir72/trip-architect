@@ -175,6 +175,35 @@ The `scripts/manual_test_*.py` scripts exercise the real agents end-to-end
 (intent conversation, composition, swap, full API flow) and require live
 credentials — run them by hand when changing agent/prompt behavior.
 
+## Eval harness
+
+`pytest` only covers deterministic logic (store, pricing, reconciliation)
+against a stubbed agent — it can't tell you whether the *real* agents
+actually respect a traveler's constraints, or whether a prompt change
+helped or hurt. `evals/` is a separate, hand-run harness for that: it scores
+the real `composition_agent`/`swap_agent` against a fixed 9-scenario battery
+(budget edge cases, family constraints, ambiguous destinations, conflicting
+preferences, price- and vibe-driven swaps) using deterministic checks —
+reusing `revalidate()` and the supply search functions rather than
+reinventing scoring rules — plus a `tool_called_check` pass (via Microsoft
+Agent Framework's own, `@experimental`-marked eval tooling) confirming the
+agents actually call the search tools instead of inventing supply.
+
+```bash
+python -m evals.run                              # run the battery once
+python -m evals.run --repeat 3                    # pass RATE per check across 3 runs (one run is noise)
+python -m evals.run --compare OLD.json NEW.json   # diff two saved reports (evals/results/*.json, gitignored)
+```
+
+Costs real Azure OpenAI calls — not part of CI, run it by hand whenever
+changing a prompt in `app/agents/prompts.py`. It has already caught two real
+issues on its first live runs, reproduced consistently across repeats (not
+LLM noise): composition only honoring an explicit `family-friendly`
+non-negotiable in 1 of 3 candidates, and `swap_component()` raising an
+uncaught exception when the agent doesn't produce a distinguishable
+replacement for a list-embedded component (an activity). See
+`evals/scenarios.py` for the full battery and why each scenario exists.
+
 ## Known limitations (prototype scope)
 
 - **Single worker, in-memory state.** `--workers 1` in the Dockerfile is
