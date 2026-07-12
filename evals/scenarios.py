@@ -43,6 +43,12 @@ class SwapScenario:
     # Same meaning as CompositionScenario.hard: False when the request is
     # sometimes unwinnable by construction (not a quality regression).
     hard: bool = True
+    # When True, evals/run.py marks the target component unavailable in
+    # supply (provider.simulate_unavailable) before the agent runs, and
+    # resets afterward -- exercises the real post-booking disruption-repair
+    # path (same swap_component() call trip_service.py makes), not just a
+    # differently-worded ordinary swap.
+    simulate_unavailable_first: bool = False
 
 
 _BASELINE = CompositionScenario(
@@ -167,5 +173,20 @@ SWAP_SCENARIOS: list[SwapScenario] = [
         component_type="activity",
         feedback="Something more outdoorsy instead.",
         expected_tag="outdoors",
+    ),
+    SwapScenario(
+        name="swap_disrupted_hotel_unavailable",
+        description="The production post-booking disruption-repair path: the current hotel is "
+        "genuinely marked unavailable in supply before the agent runs (not just worded like a "
+        "disruption), feedback mirrors trip_service._propose_unavailable_repair's synthetic "
+        "wording. Verifies the replacement is a real, currently-searchable id -- an agent that "
+        "reasonably echoes the same id back for an ordinary swap (swap_hotel_more_boutique's "
+        "soft no-op case) is not acceptable here, since the original is verified-gone.",
+        base_scenario=_BASELINE,
+        component_type="hotel",
+        feedback="This hotel is no longer available and must be replaced -- do not return the same "
+        "option. Pick the closest match to the original by price and by these preferences: "
+        "boutique, walkable, food-forward.",
+        simulate_unavailable_first=True,
     ),
 ]

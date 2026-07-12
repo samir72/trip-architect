@@ -27,7 +27,14 @@ def merge_authoritative(component: ComponentBase, authoritative: dict) -> Compon
     return type(component).model_validate(merged)
 
 
-def reconcile_with_supply(itinerary: Itinerary, constraints: Constraints) -> None:
+def lookup_authoritative(
+    itinerary: Itinerary, constraints: Constraints
+) -> tuple[dict[str, dict], dict[str, dict], dict[str, dict]]:
+    """Fresh authoritative supply records for this itinerary's resolved
+    destination/dates, keyed by id: (flights_by_id, hotels_by_id, activities_by_id).
+    Shared by reconcile_with_supply and app/supply/monitor.py's detection
+    functions, which need the exact same "what's really available right
+    now" lookup reconcile already performs."""
     resolved_destination = itinerary.hotel.destination or itinerary.flight.destination
     adults = constraints.party.adults if constraints.party else 1
 
@@ -49,6 +56,11 @@ def reconcile_with_supply(itinerary: Itinerary, constraints: Constraints) -> Non
     activities_by_id = {
         a["id"]: a for a in search_activities(resolved_destination, vibe_tags=constraints.vibe_tags)
     }
+    return flights_by_id, hotels_by_id, activities_by_id
+
+
+def reconcile_with_supply(itinerary: Itinerary, constraints: Constraints) -> None:
+    flights_by_id, hotels_by_id, activities_by_id = lookup_authoritative(itinerary, constraints)
 
     if itinerary.flight.id in flights_by_id:
         itinerary.flight = merge_authoritative(itinerary.flight, flights_by_id[itinerary.flight.id])

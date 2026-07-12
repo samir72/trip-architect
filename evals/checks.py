@@ -129,6 +129,39 @@ def check_swap_tag_if_achievable(
     return CheckResult("swap_tag_match", has_tag, f"expected {expected_tag!r} in {getattr(new_component, 'tags', [])}")
 
 
+def check_replacement_still_available(
+    new_component: ComponentBase,
+    component_type: Literal["flight", "hotel", "activity"],
+    destination: str,
+    constraints: Constraints,
+) -> CheckResult:
+    """For disruption-repair scenarios: proves the replacement is a genuinely
+    real, currently-searchable id post-simulation, not just a differently
+    labeled swap. check_swap_only_target_changed only proves *a* slot
+    changed, not that the new value is real -- an agent could satisfy that
+    check by returning any id, including a stale or hallucinated one."""
+    if component_type == "hotel":
+        pool_ids = {
+            h["id"]
+            for h in search_hotels(destination, constraints.start_date.isoformat(), constraints.end_date.isoformat())
+        }
+    elif component_type == "flight":
+        adults = constraints.party.adults if constraints.party else 1
+        pool_ids = {
+            f["id"]
+            for f in search_flights(
+                constraints.origin, destination,
+                constraints.start_date.isoformat(), constraints.end_date.isoformat(), adults=adults,
+            )
+        }
+    else:
+        pool_ids = {a["id"] for a in search_activities(destination)}
+
+    passed = new_component.id in pool_ids
+    detail = f"{new_component.id!r} {'found' if passed else 'NOT found'} in current {component_type} supply"
+    return CheckResult("replacement_still_available", passed, detail)
+
+
 def check_swap_only_target_changed(
     old_itinerary: Itinerary, new_itinerary: Itinerary, old_component_id: str, new_component_id: str
 ) -> CheckResult:

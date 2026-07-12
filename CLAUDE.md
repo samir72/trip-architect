@@ -8,8 +8,11 @@ Trip Architect: a demo-quality AI travel agent. A short conversation elicits
 the traveler's constraints, an agent composes 1–3 candidate itineraries from
 a small mocked supply catalog, and the traveler can approve, swap a
 component, reject with feedback, or undo before anything is "booked."
-Supply and booking are entirely mocked (no real flight/hotel APIs, no real
-payments) — see README.md for full product framing and known limitations.
+Booking isn't a dead end either: the same agent keeps watching a booked plan
+for price drops and disruptions, and proposes (never silently applies)
+repairs. Supply and booking are entirely mocked (no real flight/hotel APIs,
+no real payments) — see README.md for full product framing and known
+limitations.
 
 **Tech stack:** Python 3.13 · FastAPI (Uvicorn) + Gradio `Blocks` mounted on
 the same app/port · Microsoft Agent Framework (`agent-framework-core`,
@@ -63,7 +66,7 @@ suite deliberately never calls the real model.
 
 Eval harness (`evals/`; also real Azure OpenAI calls, run by hand, not CI):
 ```bash
-python -m evals.run                        # run the fixed 9-scenario battery once
+python -m evals.run                        # run the fixed 10-scenario battery once
 python -m evals.run --repeat 3              # rerun 3x, report pass RATE per check (one run is noise)
 python -m evals.run --compare OLD.json NEW.json   # diff two saved reports (evals/results/*.json, gitignored)
 ```
@@ -195,7 +198,58 @@ whole candidate set) uniformly. State machine rules enforced in
 - Reject-with-feedback is plan-level (replaces all candidates), not
   itinerary-level.
 - `booked` is a hard lock: `_assert_not_booked` blocks any further
-  swap/approve/reject/book on that plan.
+  swap/approve/reject/book on that plan. The one deliberate exception is
+  `apply_repair`/`dismiss_repair` (see "Post-booking monitoring" below),
+  which *requires* `booked` rather than forbidding it.
+
+### Post-booking monitoring
+
+`TripService.check_for_updates()` runs deterministic detection
+(`app/supply/monitor.py`'s `detect_price_drops`/`detect_unavailable_components`
+— pure functions, no agent knowledge) against a booked plan's itinerary,
+auto-called right after `book()` and whenever the Gradio UI redisplays a
+booked plan, plus on demand. Detected changes become `ProposedRepair`
+records (`app/models/plan.py`) that the traveler approves or dismisses —
+`plan_store.apply_repair()` is the one place that mutates a `booked` plan.
+
+- **Per-component price baselines are stomped, never LLM-trusted.**
+  `ComponentBase.price_snapshot_usd` is unconditionally overwritten in
+  `PlanStore.book()` (every component, not just the itinerary total) and
+  again whenever a repair's replacement itinerary is built — same
+  never-trust-the-LLM-for-a-fact principle as rationale text. Excluded from
+  `swap_agent.diff_components()`'s dump so it never leaks into a diff.
+- **A repair's replacement itinerary is precomputed at *propose* time, not
+  rebuilt at *approve* time**, and `apply_repair` persists
+  `repair.new_itinerary_snapshot` verbatim. Between propose and approve
+  another simulated change could fire; recomputing at approval time could
+  let the traveler approve something other than what they were shown.
+- **Detection upserts by `(component_id, reason)` and prunes stale
+  entries.** `check_for_updates` runs on every redisplay of a booked plan,
+  so it must update an existing pending repair in place (not append a
+  duplicate) and must dismiss a pending repair whose condition no longer
+  holds (found via live testing: resetting simulated supply left a stale
+  "price dropped" repair listed even after the price reverted). Without
+  the dedup, the disruption path in particular would fire a fresh, billed
+  LLM call on every page view while a disruption sat unresolved.
+- **The unavailable-component path reuses `swap_component()` unmodified**,
+  with synthetic feedback that explicitly forbids echoing the same id back
+  (`app/services/trip_service.py`'s `_propose_unavailable_repair`) — the
+  ordinary swap no-op fallback ("same id is fine if nothing's better") is
+  correct for a traveler-initiated swap but wrong here, since the original
+  is verified-gone. If the agent still can't find a distinguishable
+  replacement, `ValueError` is caught and that repair is simply not
+  proposed, rather than failing the whole `check_for_updates` call.
+- **Simulated market changes must run inside the live process, never a
+  standalone script.** `app/supply/provider.py`'s fixture dicts are
+  module-level state loaded once at import time in the single `uvicorn`
+  worker; a separate script process mutating them would touch its own,
+  invisible copy. `provider.simulate_price_change`/`simulate_unavailable`/
+  `simulate_reset` are only ever called from a FastAPI route
+  (`app/api/admin.py`) or a Gradio callback — see that file's docstring.
+- Flight ids are constructed at search time
+  (`f"{id_prefix}-{origin.lower()}"`), not a fixture's own key, so
+  `provider.flight_id_prefix()` is the literal inverse — use it, don't
+  parse a flight id string anywhere else.
 
 ### Testing pattern for agents
 

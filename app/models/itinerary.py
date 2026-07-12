@@ -21,6 +21,11 @@ class ComponentBase(BaseModel):
     # Filled in deterministically by app/supply/rationale.py after the
     # composition/swap agent selects a component -- never authored by the LLM.
     rationale: str = ""
+    # Stomped unconditionally at booking time (PlanStore.book()) and when a
+    # repair's replacement itinerary is built -- never trusted from the LLM,
+    # same principle as rationale. Used by app/supply/monitor.py to detect
+    # price drops per-component, not just at the itinerary total level.
+    price_snapshot_usd: float | None = None
 
 
 class FlightOption(ComponentBase):

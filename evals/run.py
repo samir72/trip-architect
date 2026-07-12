@@ -27,11 +27,13 @@ from app.agents.composition_agent import _render_composition_prompt, build_compo
 from app.agents.swap_agent import _render_swap_prompt, build_swap_agent
 from app.agents.swap_agent import swap_component as run_swap_component
 from app.models.itinerary import Itinerary
+from app.supply import provider
 from evals.checks import (
     CheckResult,
     check_destination_resolved,
     check_distinct_candidates,
     check_grounded_in_supply,
+    check_replacement_still_available,
     check_revalidate,
     check_swap_only_target_changed,
     check_swap_price_direction,
@@ -89,26 +91,44 @@ async def run_swap_scenario(agent: Agent, scenario: SwapScenario, base_itinerari
     old_component = _component(itinerary, scenario.component_type)
     constraints = scenario.base_scenario.constraints
 
-    prompt = _render_swap_prompt(itinerary, scenario.component_type, old_component.id, scenario.feedback, constraints)
-    checks.append(await check_tool_usage(agent, prompt, (SEARCH_TOOL_BY_COMPONENT[scenario.component_type],)))
-
-    new_itinerary, diff = await run_swap_component(
-        agent, itinerary, scenario.component_type, old_component.id, scenario.feedback, constraints
-    )
-    id_diff = next((d for d in diff if d.field == "id"), None)
-    new_component_id = id_diff.after if id_diff else old_component.id
-    new_component = new_itinerary.find_component(new_component_id)
-
-    checks.append(check_swap_only_target_changed(itinerary, new_itinerary, old_component.id, new_component_id))
-    if scenario.price_direction:
-        checks.append(check_swap_price_direction(old_component, new_component, scenario.price_direction))
-    if scenario.expected_tag:
-        checks.append(
-            check_swap_tag_if_achievable(
-                new_component, old_component, scenario.expected_tag, scenario.component_type,
-                itinerary.hotel.destination, constraints,
-            )
+    if scenario.simulate_unavailable_first:
+        provider.simulate_unavailable(scenario.component_type, old_component.id)
+    try:
+        prompt = _render_swap_prompt(
+            itinerary, scenario.component_type, old_component.id, scenario.feedback, constraints
         )
+        checks.append(
+            await check_tool_usage(agent, prompt, (SEARCH_TOOL_BY_COMPONENT[scenario.component_type],))
+        )
+
+        new_itinerary, diff = await run_swap_component(
+            agent, itinerary, scenario.component_type, old_component.id, scenario.feedback, constraints
+        )
+        id_diff = next((d for d in diff if d.field == "id"), None)
+        new_component_id = id_diff.after if id_diff else old_component.id
+        new_component = new_itinerary.find_component(new_component_id)
+
+        checks.append(check_swap_only_target_changed(itinerary, new_itinerary, old_component.id, new_component_id))
+        if scenario.price_direction:
+            checks.append(check_swap_price_direction(old_component, new_component, scenario.price_direction))
+        if scenario.expected_tag:
+            checks.append(
+                check_swap_tag_if_achievable(
+                    new_component, old_component, scenario.expected_tag, scenario.component_type,
+                    itinerary.hotel.destination, constraints,
+                )
+            )
+        if scenario.simulate_unavailable_first:
+            checks.append(
+                check_replacement_still_available(
+                    new_component, scenario.component_type, itinerary.hotel.destination, constraints
+                )
+            )
+    finally:
+        # Load-bearing under --repeat N: without this, the component stays
+        # unavailable for every later scenario/repeat in this same process.
+        if scenario.simulate_unavailable_first:
+            provider.simulate_reset()
     return checks
 
 

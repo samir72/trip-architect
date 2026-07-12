@@ -10,9 +10,12 @@ date objects.
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import Field
+
+if TYPE_CHECKING:
+    from app.models.itinerary import FlightOption
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -25,6 +28,12 @@ def _load(name: str) -> dict[str, list[dict[str, Any]]]:
 _FLIGHTS = _load("flights.json")
 _HOTELS = _load("hotels.json")
 _ACTIVITIES = _load("activities.json")
+
+# Runtime-only overlay for the post-booking-monitoring demo: ids "removed"
+# from supply by simulate_unavailable(). Cleared by simulate_reset(), never
+# persisted -- consistent with the rest of this app having no persistence
+# layer at all.
+_unavailable_ids: set[str] = set()
 
 
 def _parse_date(value: str) -> date:
@@ -54,6 +63,7 @@ def search_flights(
             "duration_minutes": t["duration_minutes"],
         }
         for t in templates
+        if f"{t['id_prefix']}-{origin.lower()}" not in _unavailable_ids
     ]
 
 
@@ -71,6 +81,8 @@ def search_hotels(
     nights = max((check_out_date - check_in_date).days, 1)
     results = []
     for h in _HOTELS.get(destination, []):
+        if h["id"] in _unavailable_ids:
+            continue
         deadline = check_in_date - timedelta(days=h["cancellation_deadline_days_before_checkin"])
         results.append(
             {
@@ -108,7 +120,64 @@ def search_activities(
             "tags": a["tags"],
         }
         for a in _ACTIVITIES.get(destination, [])
+        if a["id"] not in _unavailable_ids
     ]
     if vibe_tags:
         results.sort(key=lambda r: len(set(r["tags"]) & set(vibe_tags)), reverse=True)
     return results
+
+
+def simulate_hotel_price_change(destination: str, hotel_id: str, new_nightly_rate_usd: float) -> None:
+    """Demo/admin-only: mutate a hotel fixture's nightly rate in place, for
+    the post-booking-monitoring feature to detect on its next check. Must
+    be called inside the live server process -- see app/api/admin.py."""
+    for h in _HOTELS.get(destination, []):
+        if h["id"] == hotel_id:
+            h["nightly_rate_usd"] = new_nightly_rate_usd
+            return
+    raise ValueError(f"unknown hotel {hotel_id!r} in {destination!r}")
+
+
+def simulate_flight_price_change(destination: str, id_prefix: str, new_price_usd: float) -> None:
+    """new_price_usd is the per-passenger base fare (matches the fixture's
+    own unit -- search_flights multiplies this by `adults` at search time)."""
+    for t in _FLIGHTS.get(destination, []):
+        if t["id_prefix"] == id_prefix:
+            t["price_usd"] = new_price_usd
+            return
+    raise ValueError(f"unknown flight id_prefix {id_prefix!r} in {destination!r}")
+
+
+def simulate_activity_price_change(destination: str, activity_id: str, new_price_usd: float) -> None:
+    for a in _ACTIVITIES.get(destination, []):
+        if a["id"] == activity_id:
+            a["price_usd"] = new_price_usd
+            return
+    raise ValueError(f"unknown activity {activity_id!r} in {destination!r}")
+
+
+def simulate_unavailable(component_type: Literal["flight", "hotel", "activity"], key: str) -> None:
+    """key is always the component's actual, final id (the same id a booked
+    FlightOption/HotelOption/ActivityOption carries) -- for flights that's
+    the constructed "{id_prefix}-{origin}" id, not the bare id_prefix."""
+    _unavailable_ids.add(key)
+
+
+def simulate_reset() -> None:
+    """Clears the unavailable-ids overlay and reloads all three fixture
+    files from disk, discarding any simulated price changes. Runtime-only,
+    like everything else simulate_* touches -- nothing here is persisted."""
+    global _FLIGHTS, _HOTELS, _ACTIVITIES
+    _FLIGHTS = _load("flights.json")
+    _HOTELS = _load("hotels.json")
+    _ACTIVITIES = _load("activities.json")
+    _unavailable_ids.clear()
+
+
+def flight_id_prefix(flight: "FlightOption") -> str:
+    """Inverse of search_flights' id construction (f"{id_prefix}-{origin.lower()}"),
+    needed because a booked FlightOption only carries the constructed id,
+    not the fixture's own id_prefix key that simulate_flight_price_change needs."""
+    suffix = f"-{flight.origin.lower()}"
+    assert flight.id.endswith(suffix), f"flight id {flight.id!r} doesn't end with {suffix!r}"
+    return flight.id[: -len(suffix)]

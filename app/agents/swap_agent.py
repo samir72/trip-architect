@@ -25,8 +25,8 @@ def build_swap_agent() -> Agent:
 
 
 def diff_components(old: ComponentBase, new: ComponentBase) -> list[DiffEntry]:
-    old_fields = old.model_dump(mode="json", exclude={"rationale"})
-    new_fields = new.model_dump(mode="json", exclude={"rationale"})
+    old_fields = old.model_dump(mode="json", exclude={"rationale", "price_snapshot_usd"})
+    new_fields = new.model_dump(mode="json", exclude={"rationale", "price_snapshot_usd"})
     return [
         DiffEntry(field=key, before=str(old_fields.get(key)), after=str(new_fields.get(key)))
         for key in sorted(old_fields.keys() | new_fields.keys())

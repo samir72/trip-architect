@@ -116,11 +116,57 @@ class PlanStore:
                 snapshot_before={itinerary_id: itinerary.model_copy(deep=True)},
             )
         )
-        plan.itineraries[itinerary_id] = itinerary.model_copy(
-            update={"status": ItineraryStatus.BOOKED, "price_snapshot_usd": itinerary.total_cost_usd}
-        )
+        booked = itinerary.model_copy(deep=True)
+        booked.status = ItineraryStatus.BOOKED
+        booked.price_snapshot_usd = booked.total_cost_usd
+        # Per-component snapshots too, not just the itinerary total -- this
+        # is what lets app/supply/monitor.py detect *which* component
+        # dropped later, not just that the trip total changed.
+        booked.flight.price_snapshot_usd = booked.flight.price_usd
+        booked.hotel.price_snapshot_usd = booked.hotel.price_usd
+        for day in booked.days:
+            for activity in day.activities:
+                activity.price_snapshot_usd = activity.price_usd
+        plan.itineraries[itinerary_id] = booked
         plan.status = PlanStatus.BOOKED
         plan.booked_itinerary_id = itinerary_id
+        return plan
+
+    def apply_repair(self, plan_id: str, repair_id: str) -> Plan:
+        """The one deliberate, narrow exception to the booked lock: applying
+        a repair the traveler has explicitly approved. Persists
+        `repair.new_itinerary_snapshot` verbatim -- it was fully precomputed
+        at proposal time, not rebuilt here, so the traveler approves exactly
+        what they were shown even if other admin actions happened between
+        propose and approve."""
+        plan = self.get(plan_id)
+        if plan.status != PlanStatus.BOOKED:
+            raise InvalidPlanTransitionError("plan is not booked; no repair to apply")
+        repair = next((r for r in plan.proposed_repairs if r.id == repair_id), None)
+        if repair is None or repair.status != "pending":
+            raise InvalidPlanTransitionError(f"no pending repair {repair_id!r}")
+
+        old = self._require_itinerary(plan, repair.itinerary_id)
+        plan.events.append(
+            PlanEvent(
+                type=PlanEventType.REPAIR_APPLIED,
+                itinerary_id=repair.itinerary_id,
+                repair_id=repair.id,
+                snapshot_before={repair.itinerary_id: old.model_copy(deep=True)},
+            )
+        )
+        new_itinerary = repair.new_itinerary_snapshot.model_copy(deep=True)
+        new_itinerary.version = old.version + 1
+        plan.itineraries[repair.itinerary_id] = new_itinerary
+        repair.status = "approved"
+        return plan
+
+    def dismiss_repair(self, plan_id: str, repair_id: str) -> Plan:
+        plan = self.get(plan_id)
+        repair = next((r for r in plan.proposed_repairs if r.id == repair_id), None)
+        if repair is None or repair.status != "pending":
+            raise InvalidPlanTransitionError(f"no pending repair {repair_id!r}")
+        repair.status = "dismissed"
         return plan
 
     def undo(self, plan_id: str) -> Plan:
@@ -145,6 +191,10 @@ class PlanStore:
         if event.type == PlanEventType.BOOK:
             plan.status = PlanStatus.REVIEWING
             plan.booked_itinerary_id = None
+        if event.type == PlanEventType.REPAIR_APPLIED and event.repair_id:
+            repair = next((r for r in plan.proposed_repairs if r.id == event.repair_id), None)
+            if repair is not None:
+                repair.status = "pending"
         return plan
 
     def _require_itinerary(self, plan: Plan, itinerary_id: str) -> Itinerary:

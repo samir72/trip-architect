@@ -2,7 +2,7 @@ import pytest
 
 from app.models.constraints import Constraints
 from app.models.itinerary import ActivityOption, DayPlan, FlightOption, HotelOption, Itinerary, ItineraryStatus
-from app.models.plan import Plan, PlanStatus
+from app.models.plan import Plan, PlanStatus, ProposedRepair, RepairReason
 from app.store.plan_store import InvalidPlanTransitionError, PlanNotFoundError, PlanStore
 
 
@@ -169,3 +169,99 @@ def test_get_missing_plan_raises():
     store = PlanStore()
     with pytest.raises(PlanNotFoundError):
         store.get("does-not-exist")
+
+
+def _booked_plan(store: PlanStore) -> Plan:
+    plan = _new_plan(store)
+    store.record_composition(plan.id, [_itinerary("a")])
+    store.approve(plan.id, "a")
+    store.book(plan.id, "a")
+    return store.get(plan.id)
+
+
+def _price_drop_repair(plan: Plan, new_total: float = 1200) -> ProposedRepair:
+    booked = plan.itineraries["a"]
+    new_hotel = _hotel("h-a", name="Hotel A")
+    new_hotel.price_usd = new_total - booked.flight.price_usd
+    new_itinerary = booked.model_copy(deep=True)
+    new_itinerary.hotel = new_hotel
+    new_itinerary.total_cost_usd = new_total
+    repair = ProposedRepair(
+        plan_id=plan.id, itinerary_id="a", component_type="hotel", component_id="h-a",
+        reason=RepairReason.PRICE_DROP, new_component=new_hotel, new_itinerary_snapshot=new_itinerary,
+        price_delta_usd=new_total - booked.total_cost_usd, rationale="price dropped",
+    )
+    plan.proposed_repairs.append(repair)
+    return repair
+
+
+def test_apply_repair_requires_booked_plan():
+    store = PlanStore()
+    plan = _new_plan(store)
+    store.record_composition(plan.id, [_itinerary("a")])
+    repair = _price_drop_repair(store.get(plan.id))
+    with pytest.raises(InvalidPlanTransitionError):
+        store.apply_repair(plan.id, repair.id)
+
+
+def test_apply_repair_replaces_itinerary_and_bumps_version():
+    store = PlanStore()
+    plan = _booked_plan(store)
+    repair = _price_drop_repair(plan, new_total=1200)
+
+    store.apply_repair(plan.id, repair.id)
+    plan = store.get(plan.id)
+    assert plan.itineraries["a"].total_cost_usd == 1200
+    assert plan.itineraries["a"].version == 2
+    assert plan.status == PlanStatus.BOOKED  # stays booked throughout
+    assert next(r for r in plan.proposed_repairs if r.id == repair.id).status == "approved"
+
+
+def test_apply_repair_rejects_unknown_or_non_pending_id():
+    store = PlanStore()
+    plan = _booked_plan(store)
+    with pytest.raises(InvalidPlanTransitionError):
+        store.apply_repair(plan.id, "does-not-exist")
+
+    repair = _price_drop_repair(plan)
+    store.apply_repair(plan.id, repair.id)
+    with pytest.raises(InvalidPlanTransitionError):
+        store.apply_repair(plan.id, repair.id)  # already approved, not pending
+
+
+def test_undo_after_apply_repair_restores_itinerary_and_repair_status():
+    store = PlanStore()
+    plan = _booked_plan(store)
+    original_hotel_price = plan.itineraries["a"].hotel.price_usd
+    repair = _price_drop_repair(plan, new_total=1200)
+
+    store.apply_repair(plan.id, repair.id)
+    store.undo(plan.id)
+
+    plan = store.get(plan.id)
+    assert plan.itineraries["a"].hotel.price_usd == original_hotel_price
+    assert next(r for r in plan.proposed_repairs if r.id == repair.id).status == "pending"
+
+
+def test_dismiss_repair_flips_status_without_new_event():
+    store = PlanStore()
+    plan = _booked_plan(store)
+    repair = _price_drop_repair(plan)
+    event_count_before = len(plan.events)
+
+    store.dismiss_repair(plan.id, repair.id)
+    plan = store.get(plan.id)
+    assert next(r for r in plan.proposed_repairs if r.id == repair.id).status == "dismissed"
+    assert len(plan.events) == event_count_before
+
+
+def test_dismiss_repair_rejects_unknown_or_non_pending_id():
+    store = PlanStore()
+    plan = _booked_plan(store)
+    with pytest.raises(InvalidPlanTransitionError):
+        store.dismiss_repair(plan.id, "does-not-exist")
+
+    repair = _price_drop_repair(plan)
+    store.dismiss_repair(plan.id, repair.id)
+    with pytest.raises(InvalidPlanTransitionError):
+        store.dismiss_repair(plan.id, repair.id)

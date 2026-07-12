@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.models.itinerary import Itinerary
-from app.models.plan import Plan, SwapOutcome
+from app.models.plan import Plan, ProposedRepair, RepairOutcome, SwapOutcome
 from app.services.trip_service import TripService, get_trip_service
 from app.store.plan_store import InvalidPlanTransitionError, PlanNotFoundError
 
@@ -100,3 +100,33 @@ def book(plan_id: str, body: BookRequest, service: TripService = Depends(get_tri
         raise _invalid(exc) from None
     itinerary = plan.itineraries[body.itinerary_id]
     return BookResponse(booking_id=f"bk-{plan.id}-{itinerary.id}", itinerary=itinerary)
+
+
+@router.post("/{plan_id}/check-for-updates", response_model=list[ProposedRepair])
+async def check_for_updates(plan_id: str, service: TripService = Depends(get_trip_service)) -> list[ProposedRepair]:
+    try:
+        return await service.check_for_updates(plan_id)
+    except PlanNotFoundError:
+        raise _not_found() from None
+
+
+@router.post("/{plan_id}/repairs/{repair_id}/approve", response_model=RepairOutcome)
+async def approve_repair(
+    plan_id: str, repair_id: str, service: TripService = Depends(get_trip_service)
+) -> RepairOutcome:
+    try:
+        return await service.approve_repair(plan_id, repair_id)
+    except PlanNotFoundError:
+        raise _not_found() from None
+    except (InvalidPlanTransitionError, ValueError) as exc:
+        raise _invalid(exc) from None
+
+
+@router.post("/{plan_id}/repairs/{repair_id}/dismiss", response_model=Plan)
+def dismiss_repair(plan_id: str, repair_id: str, service: TripService = Depends(get_trip_service)) -> Plan:
+    try:
+        return service.dismiss_repair(plan_id, repair_id)
+    except PlanNotFoundError:
+        raise _not_found() from None
+    except InvalidPlanTransitionError as exc:
+        raise _invalid(exc) from None

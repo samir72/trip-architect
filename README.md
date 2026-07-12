@@ -32,9 +32,12 @@ component of, reject with feedback, or undo — before anything is "booked."
   supply data (`app/supply/rationale.py`, `app/supply/revalidate.py`) —
   the LLM selects and writes summary/identity text, but never authors a
   factual claim about price, dates, or cancellation policy.
-- **No post-booking monitoring.** Price-drop/disruption watching is a
-  deliberately deferred later phase; the data model captures what it would
-  need (cancellation deadlines, price snapshots) without building the loop.
+- **Post-booking monitoring, demo-triggered.** Once booked, the same agent
+  keeps watching: price drops and "component no longer available" disruptions
+  are proposed as repairs the traveler approves or dismisses — never applied
+  silently. Since the mocked supply never changes on its own, a market change
+  is triggered explicitly (UI demo controls or `/admin/*` routes) rather than
+  drifting in the background. See "Post-booking monitoring" below.
 
 ## Tech stack
 
@@ -74,12 +77,17 @@ flowchart TD
     G --> D
     D -->|"Undo"| H["Last event reversed\n(swap / approve / recompose)"]
     H --> D
-    E -->|"Book"| I(["booked — hard lock,\nno further changes"])
+    E -->|"Book"| I(["booked — hard lock,\nno further ordinary\nswap/approve/reject"])
+    I --> J["Check for updates\n(auto on view, or on demand)"]
+    J -->|"price drop or\ncomponent unavailable"| K["Repair proposed\n(never applied silently)"]
+    K -->|"Approve"| L["Itinerary replaced\nin place, still booked"]
+    K -->|"Dismiss"| J
+    L --> J
 ```
 
 Every step in that loop is either the traveler's own action or something
-they explicitly triggered (Approve/Swap/Reject/Book) — nothing executes or
-spends money without an explicit click.
+they explicitly triggered (Approve/Swap/Reject/Book/Approve repair) —
+nothing executes or spends money without an explicit click.
 
 ## Architecture
 
@@ -152,7 +160,9 @@ A few things this diagram simplifies, spelled out:
 - Swapping a component on an itinerary that's still `proposed` leaves its
   status unchanged (only an *approved* itinerary gets demoted back to
   `proposed` — content never changes silently under an "approved" label).
-- `booked` is a hard lock: no further swap/approve/reject/undo on that plan.
+- `booked` is a hard lock on *ordinary* swap/approve/reject — the one
+  deliberate exception is a traveler-approved post-booking repair (see
+  below), which replaces the itinerary in place without unlocking the plan.
 - **Undo** isn't a forward transition — it pops the plan's last event
   (`app/store/plan_store.py`'s typed `PlanEvent` log) and restores whatever
   came before it, whether that event was a swap, an approve, or a book.
@@ -161,6 +171,42 @@ A few things this diagram simplifies, spelled out:
   `ItineraryStatus.REJECTED` exists on the model but isn't currently
   assigned by any code path — rejected candidates are simply dropped from
   the active set (and retained in the event log for undo).
+
+## Post-booking monitoring
+
+Booking isn't a dead end. Once a plan is `booked`, `TripService.check_for_updates()`
+(`app/supply/monitor.py`, deterministic — no LLM call for detection) runs
+automatically right after booking and whenever the booked plan is
+redisplayed, plus on demand via a "Check for updates" button. It looks for
+two things against the booked itinerary's components:
+
+- **Price drops** — a component whose supply price fell since it was booked
+  (or since the last repair), still inside its cancellation window. Building
+  the repriced replacement itinerary is pure Python (`reconcile_and_price`),
+  no LLM involved.
+- **Unavailable components** — a component no longer present in supply at
+  all. Here the swap agent picks a real replacement, using the same
+  `swap_component()` call an ordinary swap uses, with feedback that makes
+  the "this one's actually gone, don't re-pick it" constraint explicit.
+
+Either way, the result is a `ProposedRepair` — **proposed, never silently
+applied**. The traveler approves it (replaces the booked itinerary with the
+precomputed replacement, logs an undoable `REPAIR_APPLIED` event, plan stays
+`booked`) or dismisses it. A repair whose condition resolves before it's
+acted on (e.g. the price change gets reset) is auto-dismissed the next time
+`check_for_updates` runs, rather than lingering.
+
+**Why triggers are explicit, not background drift:** the mocked supply
+(`app/supply/provider.py`'s fixture dicts) never changes on its own, and
+there's no background scheduler in this app (Gradio's UI is request-driven;
+free-tier hosting also sleeps after inactivity). So "the market changed" is
+simulated via an explicit action that runs *inside* the one live `uvicorn`
+process — either the Gradio UI's demo controls on the booked-trip panel, or
+the equivalent `POST /admin/plans/{plan_id}/simulate-price-drop`,
+`/simulate-unavailable`, and `/admin/reset` routes. A standalone script
+mutating `provider.py`'s module-level fixtures would touch its own,
+invisible copy of that memory, not the server's — see
+`app/api/admin.py`'s docstring.
 
 ## Running locally
 
@@ -204,13 +250,15 @@ credentials — run them by hand when changing agent/prompt behavior.
 against a stubbed agent — it can't tell you whether the *real* agents
 actually respect a traveler's constraints, or whether a prompt change
 helped or hurt. `evals/` is a separate, hand-run harness for that: it scores
-the real `composition_agent`/`swap_agent` against a fixed 9-scenario battery
+the real `composition_agent`/`swap_agent` against a fixed 10-scenario battery
 (budget edge cases, family constraints, ambiguous destinations, conflicting
-preferences, price- and vibe-driven swaps) using deterministic checks —
-reusing `revalidate()` and the supply search functions rather than
-reinventing scoring rules — plus a `tool_called_check` pass (via Microsoft
-Agent Framework's own, `@experimental`-marked eval tooling) confirming the
-agents actually call the search tools instead of inventing supply.
+preferences, price- and vibe-driven swaps, and a post-booking disruption
+repair that genuinely marks a component unavailable in supply before the
+agent runs) using deterministic checks — reusing `revalidate()` and the
+supply search functions rather than reinventing scoring rules — plus a
+`tool_called_check` pass (via Microsoft Agent Framework's own,
+`@experimental`-marked eval tooling) confirming the agents actually call the
+search tools instead of inventing supply.
 
 ```bash
 python -m evals.run                              # run the battery once
@@ -245,6 +293,11 @@ fixture catalog and a multi-day trip make duplicates the norm. See
   corruption (e.g. booking still requires `approved` status), but the
   traveler-visible behavior in that narrow window can be confusing. A
   busy-state lock in the UI would close this gap; not built for v1.
+- **Post-booking monitoring reacts to simulated changes, not real market
+  data.** There's no live pricing feed and no background scheduler — a
+  price drop or disruption only exists because the demo controls (or the
+  `/admin/*` routes) explicitly triggered it. The detection/repair/approve
+  loop itself is real; what's simulated is the "something changed" signal.
 
 ## Deployment
 
