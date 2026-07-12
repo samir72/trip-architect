@@ -39,9 +39,15 @@ def check_destination_resolved(itinerary: Itinerary, expected_city: str | None) 
 
 
 def check_distinct_candidates(itineraries: list[Itinerary]) -> CheckResult:
-    hotel_ids = [itin.hotel.id for itin in itineraries]
-    passed = len(set(hotel_ids)) == len(hotel_ids)
-    return CheckResult("distinct_candidates", passed, f"hotel ids: {hotel_ids}")
+    """Two candidates only count as "the same trip" if they share every
+    component id -- hotel, flight, and every activity. A shared hotel
+    forced by a non-negotiable (e.g. only one family-friendly hotel in a
+    city) is legitimate as long as the flight and/or activities still
+    differ; only a candidate that's identical end-to-end is a real dupe."""
+    signatures = [frozenset(c.id for c in itin.all_components()) for itin in itineraries]
+    passed = len(set(signatures)) == len(signatures)
+    detail = f"component signatures: {[sorted(sig) for sig in signatures]}"
+    return CheckResult("distinct_candidates", passed, detail)
 
 
 def check_grounded_in_supply(itinerary: Itinerary, constraints: Constraints) -> CheckResult:

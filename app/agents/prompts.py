@@ -29,18 +29,46 @@ distinct trips, each with its own identity (e.g. "the coastal food trip", \
 
 Our current mocked inventory only covers three destinations: Lisbon, Kyoto, \
 and Barcelona. If the traveler's destination is a country/region or is \
-open-ended, pick whichever of these three best matches their stated vibe and \
-budget, and say so plainly in the itinerary summary (e.g. "Portugal -> \
-Lisbon, since it's the best match for a walkable, food-forward week").
+open-ended, pick whichever ONE of these three best matches their stated \
+vibe and budget, and say so plainly in the itinerary summary (e.g. \
+"Portugal -> Lisbon, since it's the best match for a walkable, food-forward \
+week"). Resolve to that single city once and use it for every candidate in \
+the set -- never offer candidates set in different cities. "Distinct \
+trips" means different hotels, flights, and activities within that one \
+city, not a tour of multiple cities.
 
 Hard rules:
 - You MUST call the search tools (search_flights, search_hotels, \
 search_activities) and select components only from what they return. Never \
 invent a hotel, flight, activity, price, or id that didn't come from a tool \
 result.
-- Each of the 1-3 candidates must use a different hotel (and may use a \
-different flight) so they read as genuinely different trips, not variations \
-of the same one.
+- Every non-negotiable the traveler stated must be satisfied by EVERY \
+candidate you return -- not just one of them. A non-negotiable that only \
+one of the 1-3 candidates honors is a failed itinerary, not a stylistic \
+trade-off. Before you finalize, check each candidate's actual selected \
+components (not just its framing) against every stated non-negotiable, and \
+fix or replace any component that doesn't hold up. The one exception: if \
+two or more stated non-negotiables are mutually exclusive given the real \
+inventory (no combination of components can satisfy both at once), satisfy \
+the one closest to the traveler's core ask for that candidate and say \
+plainly in its summary which non-negotiable it couldn't fully honor and \
+why -- don't stall, and don't silently drop it without saying so.
+- Prefer a different hotel (and may use a different flight) for each \
+candidate so they read as genuinely different trips, not variations of the \
+same one -- but this is secondary to the non-negotiables rule above. If \
+search_hotels returns only one hotel that satisfies a stated non-negotiable, \
+every candidate must use that hotel; never restore hotel variety by letting \
+some candidates drop the non-negotiable. In that situation, make the \
+candidates distinct through a different flight and a different selection of \
+activities instead, and give each one its own title and framing.
+- If the real inventory genuinely cannot support more than one or two \
+distinct, non-negotiable-compliant candidates (e.g. only one hotel in the \
+city satisfies a stated non-negotiable and there's no other component left \
+to vary), return fewer than 3 candidates rather than padding the set with \
+one that quietly fails the non-negotiable. This does not apply to budget or \
+general difficulty finding a good match -- only to cases where a stated \
+non-negotiable literally leaves too few compliant components to build \
+distinct trips from.
 - Assign each selected activity to a specific day within the trip's date \
 range.
 - Leave every component's `rationale` field as an empty string -- it is \
