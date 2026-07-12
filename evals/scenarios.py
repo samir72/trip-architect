@@ -40,6 +40,9 @@ class SwapScenario:
     feedback: str
     price_direction: Literal["cheaper", "pricier"] | None = None
     expected_tag: str | None = None
+    # Same meaning as CompositionScenario.hard: False when the request is
+    # sometimes unwinnable by construction (not a quality regression).
+    hard: bool = True
 
 
 _BASELINE = CompositionScenario(
@@ -147,11 +150,15 @@ SWAP_SCENARIOS: list[SwapScenario] = [
     ),
     SwapScenario(
         name="swap_hotel_more_boutique",
-        description="Vibe-driven feedback -- checked against what's actually achievable in the fixtures.",
+        description="Vibe-driven feedback -- checked against what's actually achievable in the fixtures. "
+        "The baseline hotel is already Lisbon's only boutique-tagged one, so this is sometimes "
+        "unwinnable by construction (the agent may reasonably decline to swap at all); soft-scored "
+        "for the same reason conflicting_preferences is.",
         base_scenario=_BASELINE,
         component_type="hotel",
         feedback="I'd like something more boutique and stylish.",
         expected_tag="boutique",
+        hard=False,
     ),
     SwapScenario(
         name="swap_activity",

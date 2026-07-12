@@ -132,9 +132,28 @@ def check_swap_tag_if_achievable(
 def check_swap_only_target_changed(
     old_itinerary: Itinerary, new_itinerary: Itinerary, old_component_id: str, new_component_id: str
 ) -> CheckResult:
-    old_ids = {c.id for c in old_itinerary.all_components()}
-    new_ids = {c.id for c in new_itinerary.all_components()}
-    expected_new_ids = (old_ids - {old_component_id}) | {new_component_id}
-    passed = new_ids == expected_new_ids
-    detail = f"new ids: {sorted(new_ids)}; expected: {sorted(expected_new_ids)}"
+    """Positional comparison, not id-set comparison -- duplicate activity
+    ids within one itinerary (near-guaranteed once a trip has more days
+    than the destination has unique activities) make set arithmetic
+    unreliable in both directions: it can flag a correct swap as wrong (the
+    targeted id recurs elsewhere, so removing it from the set removes ALL
+    occurrences, not just the one slot) and miss a real violation (two
+    slots change, but the id sets still happen to balance)."""
+
+    def slots(itin: Itinerary) -> list[tuple[str, str]]:
+        result = [("flight", itin.flight.id), ("hotel", itin.hotel.id)]
+        for day_index, day in enumerate(itin.days):
+            for activity_index, activity in enumerate(day.activities):
+                result.append((f"day{day_index}.activity{activity_index}", activity.id))
+        return result
+
+    old_slots, new_slots = slots(old_itinerary), slots(new_itinerary)
+    if len(old_slots) != len(new_slots):
+        return CheckResult(
+            "swap_only_target_changed", False, f"slot count changed: {len(old_slots)} -> {len(new_slots)}"
+        )
+
+    changed = [(label, o, n) for (label, o), (_, n) in zip(old_slots, new_slots) if o != n]
+    passed = len(changed) == 1 and changed[0][1] == old_component_id and changed[0][2] == new_component_id
+    detail = f"changed slots: {changed}" if changed else "no slots changed"
     return CheckResult("swap_only_target_changed", passed, detail)

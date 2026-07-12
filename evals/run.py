@@ -139,7 +139,7 @@ async def run_battery(repeat: int) -> list[list[ScenarioReport]]:
                     checks = await run_swap_scenario(swap_agent, scenario, base_itineraries)
                 except Exception as exc:  # noqa: BLE001
                     checks = [CheckResult("scenario_error", False, f"{type(exc).__name__}: {exc}")]
-            reports.append(ScenarioReport(scenario.name, "swap", True, checks))
+            reports.append(ScenarioReport(scenario.name, "swap", scenario.hard, checks))
 
         all_runs.append(reports)
     return all_runs
