@@ -36,6 +36,28 @@ component of, reject with feedback, or undo — before anything is "booked."
   deliberately deferred later phase; the data model captures what it would
   need (cancellation deadlines, price snapshots) without building the loop.
 
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Language / runtime | Python 3.13 |
+| Agent orchestration | [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) — `agent-framework-core`, `agent-framework-openai` |
+| LLM provider | Azure OpenAI (via an Azure AI Foundry resource's Azure-OpenAI-compatible endpoint, API-key auth) |
+| Web/API framework | FastAPI, served by Uvicorn |
+| UI | Gradio `Blocks`, mounted onto the FastAPI app (single process, one port) |
+| Data validation / models | Pydantic v2, `pydantic-settings` for config |
+| Supply data | Static JSON fixtures (no database) |
+| State | In-memory, process-local (`PlanStore`, `SessionStore`) — no persistence layer |
+| Testing | `pytest` + `pytest-asyncio`, `httpx`/FastAPI `TestClient`; a hand-rolled `StubAgent` duck-types the real `Agent` class so orchestration/store/reconciliation logic is tested for real without live model calls |
+| Agent quality evals | `evals/` — a custom harness reusing the app's own deterministic logic (`revalidate()`, supply search) for scoring, plus Microsoft Agent Framework's `LocalEvaluator`/`evaluate_agent`/`tool_called_check` for tool-use verification |
+| Containerization | Docker (`python:3.13-slim` base); one image, portable across hosts via a `$PORT`-aware entrypoint |
+| Deployment | Render (Docker web service, current live host); Hugging Face Spaces also supported (Docker SDK) |
+| Source control / CI hosting | GitHub (private repo) |
+| Dev tooling | VS Code `launch.json`/`settings.json` for debugging the app and tests without `--reload` (so breakpoints attach to the real worker process) |
+
+See `requirements.txt` for exact version floors and `Dockerfile` for the
+runtime image.
+
 ## How it works
 
 ```mermaid
@@ -196,12 +218,16 @@ python -m evals.run --compare OLD.json NEW.json   # diff two saved reports (eval
 ```
 
 Costs real Azure OpenAI calls — not part of CI, run it by hand whenever
-changing a prompt in `app/agents/prompts.py`. It has already caught two real
-issues on its first live runs, reproduced consistently across repeats (not
-LLM noise): composition only honoring an explicit `family-friendly`
-non-negotiable in 1 of 3 candidates, and `swap_component()` raising an
-uncaught exception when the agent doesn't produce a distinguishable
-replacement for a list-embedded component (an activity). See
+changing a prompt in `app/agents/prompts.py`. It caught two real issues on
+its first live runs, reproduced consistently across repeats (not LLM
+noise), both since fixed: composition only honoring an explicit
+`family-friendly` non-negotiable in 1 of 3 candidates, and an activity swap
+silently failing with a confusing error instead of succeeding — not a
+crash (the REST API and Gradio UI both already handle it gracefully, via a
+409 and an inline error message respectively), but a legitimate,
+achievable request that didn't get fulfilled, caused by a detection bug
+that assumed activity ids are unique within one itinerary when a small
+fixture catalog and a multi-day trip make duplicates the norm. See
 `evals/scenarios.py` for the full battery and why each scenario exists.
 
 ## Known limitations (prototype scope)
