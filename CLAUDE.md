@@ -118,6 +118,24 @@ When touching agent prompts (`app/agents/prompts.py`), preserve this split:
 the LLM's job is selection, identity/summary text, and day-scheduling —
 never arithmetic or a specific factual claim about a component.
 
+**Non-negotiables must hold for every candidate composition returns, not
+just one.** Found as a real bug via `evals/`: with `hotels.json` having
+exactly 3 hotels per city and exactly 1 tagged `family-friendly` per city,
+the model would satisfy a `family-friendly` non-negotiable for only 1 of 3
+candidates, because `COMPOSITION_AGENT_INSTRUCTIONS` had "each candidate
+must use a different hotel" as an explicit hard rule but never said
+non-negotiables were required for every candidate — the model resolved the
+undocumented tension in favor of the rule that *was* explicit. If you edit
+this prompt, preserve: the escape valve for genuinely mutually-exclusive
+non-negotiables (needed so `conflicting_preferences` doesn't stall trying
+to satisfy the impossible), permission to share a hotel across candidates
+when a non-negotiable forces it, and the single-resolved-city-per-candidate-set
+rule (a related regression surfaced mid-fix: emphasizing "make candidates
+distinct" without this rule caused candidates to land in three different
+cities instead of three hotel variations within one). Re-run
+`python -m evals.run --repeat 3` before/after any change here — see
+Commands above.
+
 ### Mocked supply
 
 `app/supply/provider.py`'s `search_flights`/`search_hotels`/
@@ -126,8 +144,10 @@ Barcelona only) and are passed directly as Agent Framework tool functions
 (`tools=[...]` on `composition_agent`/`swap_agent`) — their signatures use
 `Annotated[..., Field(description=...)]` because the framework introspects
 them to build the function-calling schema. Broader/country-level
-destinations (e.g. "Portugal") are resolved to a specific supported city by
-the composition agent's prompt, not by the search functions.
+destinations (e.g. "Portugal") are resolved to a single specific supported
+city by the composition agent's prompt (not by the search functions), and
+that same city must be used for every candidate in the set — see the
+non-negotiables note below for why that consistency rule exists.
 
 ### Store: typed event log, not a version stack
 
