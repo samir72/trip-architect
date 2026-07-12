@@ -145,6 +145,28 @@ cities instead of three hotel variations within one). Re-run
 `python -m evals.run --repeat 3` before/after any change here — see
 Commands above.
 
+**Activity ids are not unique within one itinerary — never assume they
+are.** Each city's fixture catalog has only ~4 activities
+(`app/supply/fixtures/activities.json`); a trip longer than that guarantees
+at least one activity repeats across days (pigeonhole principle). This
+broke swap detection: `app/agents/swap_agent.py`'s `_locate_new_component_id`
+used to find a valid activity swap by checking whether the new id "wasn't
+anywhere in the old itinerary" — which fails whenever the genuinely
+swapped-in replacement happens to already be scheduled on another day (the
+common case, not an edge case, which is why it reproduced on every eval
+run). Fixed with position-based lookup: locate the `(day_index,
+activity_index)` that held the target id and read back whatever now
+occupies that same slot, with a no-op guard (same id at the same slot ≠ a
+real change) and the old set-difference kept only as a fallback for the
+rare case where the agent restructures days. The same assumption was also
+wrong in `evals/checks.py`'s `check_swap_only_target_changed` (fixed
+alongside — positional diff, not id-set arithmetic) and in
+`swap_component()`'s post-reconcile component lookup (fixed to re-read by
+position, not by id, since first-match-wins by id can silently grab an
+earlier day's object sharing the same id when the swap target isn't day
+1). If you touch any id-based comparison over `Itinerary.all_components()`
+or `itinerary.days`, check whether it silently assumes uniqueness.
+
 ### Mocked supply
 
 `app/supply/provider.py`'s `search_flights`/`search_hotels`/
