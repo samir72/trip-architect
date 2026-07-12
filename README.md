@@ -43,6 +43,7 @@ component of, reject with feedback, or undo — before anything is "booked."
 | Language / runtime | Python 3.13 |
 | Agent orchestration | [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) — `agent-framework-core`, `agent-framework-openai` |
 | LLM provider | Azure OpenAI (via an Azure AI Foundry resource's Azure-OpenAI-compatible endpoint, API-key auth) |
+| LLM model | Not hardcoded — set by `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` (`.env`), whatever chat-capable model your Azure OpenAI/Foundry resource has deployed under that name. This deployment currently runs `gpt-5.4-nano`. |
 | Web/API framework | FastAPI, served by Uvicorn |
 | UI | Gradio `Blocks`, mounted onto the FastAPI app (single process, one port) |
 | Data validation / models | Pydantic v2, `pydantic-settings` for config |

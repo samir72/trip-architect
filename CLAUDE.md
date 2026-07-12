@@ -14,7 +14,9 @@ payments) — see README.md for full product framing and known limitations.
 **Tech stack:** Python 3.13 · FastAPI (Uvicorn) + Gradio `Blocks` mounted on
 the same app/port · Microsoft Agent Framework (`agent-framework-core`,
 `agent-framework-openai`) against Azure OpenAI (API-key auth via an Azure
-AI Foundry resource's OpenAI-compatible endpoint) · Pydantic v2 /
+AI Foundry resource's OpenAI-compatible endpoint) · **model is not
+hardcoded** — set by `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME` in `.env`;
+currently deployed as `gpt-5.4-nano` · Pydantic v2 /
 `pydantic-settings` · static JSON fixtures, no database · in-memory
 process-local state, no persistence layer · `pytest`/`pytest-asyncio` +
 a hand-rolled `StubAgent` (no live-model tests in CI) · `evals/`, a custom
