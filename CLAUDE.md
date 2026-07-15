@@ -24,7 +24,7 @@ currently deployed as `gpt-5.4-nano` · Pydantic v2 /
 process-local state, no persistence layer · `pytest`/`pytest-asyncio` +
 a hand-rolled `StubAgent` (no live-model tests in CI) · `evals/`, a custom
 agent-quality harness (see Commands below) · Docker (`python:3.13-slim`) ·
-deployed on Render, Hugging Face Spaces also supported · GitHub (private).
+deployed on Render, Hugging Face Spaces also supported · GitHub (public).
 Exact versions: `requirements.txt`. Runtime image: `Dockerfile`.
 
 ## Commands
