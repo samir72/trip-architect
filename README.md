@@ -56,7 +56,7 @@ component of, reject with feedback, or undo — before anything is "booked."
 | Agent quality evals | `evals/` — a custom harness reusing the app's own deterministic logic (`revalidate()`, supply search) for scoring, plus Microsoft Agent Framework's `LocalEvaluator`/`evaluate_agent`/`tool_called_check` for tool-use verification |
 | Containerization | Docker (`python:3.13-slim` base); one image, portable across hosts via a `$PORT`-aware entrypoint |
 | Deployment | Render (Docker web service, current live host); Hugging Face Spaces also supported (Docker SDK) |
-| Source control / CI hosting | GitHub (private repo) |
+| Source control / CI hosting | GitHub (public repo) |
 | Dev tooling | VS Code `launch.json`/`settings.json` for debugging the app and tests without `--reload` (so breakpoints attach to the real worker process) |
 
 See `requirements.txt` for exact version floors and `Dockerfile` for the
